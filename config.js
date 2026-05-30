@@ -1,0 +1,2 @@
+const SUPABASE_URL = "https://wfblteaoolhnapoiwkgy.supabase.co"
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmYmx0ZWFvb2xobmFwb2l3a2d5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0OTIyNzIsImV4cCI6MjA5NTA2ODI3Mn0.ZERwpgLe-ZXLUZTNWd9DcA_Msnq-7G2rvHcWmr5NAMA"

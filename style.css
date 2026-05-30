@@ -1,0 +1,72 @@
+body {
+    margin: 0;
+    padding: 20px;
+    font-family: Arial;
+}
+
+.login {
+    width: 300px;
+    margin: 100px auto;
+}
+
+.login input {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.top {
+    display: flex;
+    gap: 20px;
+}
+
+.table-container {
+    flex: 1;
+    overflow: auto;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+th,
+td {
+    border: 1px solid black;
+    padding: 8px;
+}
+
+td input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.total-cell {
+    font-weight: bold;
+    background: #f5f5f5;
+}
+
+.sidebar {
+    width: 250px;
+}
+
+.card {
+    border: 1px solid black;
+    padding: 16px;
+    margin-bottom: 15px;
+}
+
+.operation-form {
+    display: flex;
+    gap: 10px;
+}
+
+.logout {
+    width: 120px;
+}
+

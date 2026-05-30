@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Debt Tracker</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div id="app">
+
+    <div v-if="!user" class="login">
+
+        <h2>Вход</h2>
+
+        <input
+                v-model="email"
+                placeholder="Email"
+        >
+
+        <input
+                type="password"
+                v-model="password"
+                placeholder="Password"
+        >
+
+        <button @click="login">
+            Войти
+        </button>
+
+    </div>
+
+    <div v-else class="main">
+
+        <div class="top">
+
+            <div class="table-container">
+
+                <table>
+
+                    <thead>
+
+                    <tr>
+                        <th>Дата</th>
+
+                        <th
+                                v-for="participant in participants"
+                                :key="participant.id"
+                        >
+                            {{ participant.name }}
+                        </th>
+
+                        <th>Итого</th>
+                    </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                    <tr
+                            v-for="row in rows"
+                            :key="row.date"
+                    >
+
+                        <td>{{ row.date }}</td>
+
+                        <td
+                                v-for="participant in participants"
+                                :key="participant.id"
+                        >
+                            {{ row.values[participant.id] || '' }}
+                        </td>
+
+                        <td class="total-cell">{{ rowTotal(row) }}</td>
+
+                    </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <div class="sidebar">
+
+                <div class="card">
+                    <h3>Сумма за день</h3>
+                    <div>{{ todayTotal }}</div>
+                </div>
+
+                <div class="card">
+                    <h3>Общий баланс</h3>
+                    <div>{{ totalBalance }}</div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="operation-form">
+
+            <select v-model="newOperation.from">
+
+                <option
+                        v-for="participant in participants"
+                        :value="participant.id"
+                >
+                    {{ participant.name }}
+                </option>
+
+            </select>
+
+            <select v-model="newOperation.to">
+
+                <option
+                        v-for="participant in participants"
+                        :value="participant.id"
+                >
+                    {{ participant.name }}
+                </option>
+
+            </select>
+
+            <input
+                    type="number"
+                    v-model.number="newOperation.amount"
+                    placeholder="Сумма"
+            >
+
+            <button @click="createOperation">
+                Сохранить
+            </button>
+
+        </div>
+
+        <button
+                class="logout"
+                @click="logout"
+        >
+            Выйти
+        </button>
+
+    </div>
+
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
