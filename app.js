@@ -1,221 +1,300 @@
-const { createApp } = Vue
-
-const sb = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
-)
+const { createApp } = Vue;
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 createApp({
-
     data() {
         return {
             user: null,
-
-            email: "",
-            password: "",
-
+            email: '',
+            password: '',
             participants: [],
             operations: [],
             snapshots: [],
-            rows: [],
-
+            selectedParticipant: null,
             newOperation: {
-                from: null,
                 to: null,
                 amount: 0
             },
-            selectedParticipant: null
-        }
+            manualDate: false,
+            selectedDate: new Date().toISOString().slice(0, 10),
+            currentPage: 1,
+            rowsPerPage: 10
+        };
     },
 
     computed: {
-        filteredOperations() {
-
-            if (!this.selectedParticipant)
-                return []
-
+        allOperations() {
+            if (!this.selectedParticipant) return [];
+            
             return this.operations.filter(
                 op => op.from === this.selectedParticipant
-            )
+            );
         },
-
-        totalBalance() {
-            const latest = {}
-            this.snapshots.forEach(s => {
-                if (!latest[s.participant_id] ||
-                    s.created_at > latest[s.participant_id].created_at) {
-                    latest[s.participant_id] = s
+        
+        totalPages() {
+            return Math.ceil(this.allOperations.length / this.rowsPerPage);
+        },
+        
+        paginatedOperations() {
+            const start = (this.currentPage - 1) * this.rowsPerPage;
+            const end = start + this.rowsPerPage;
+            return this.allOperations.slice(start, end);
+        },
+        
+        pageNumbers() {
+            const delta = 2;
+            const range = [];
+            const rangeWithDots = [];
+            let l;
+            
+            for (let i = 1; i <= this.totalPages; i++) {
+                if (i === 1 || i === this.totalPages || 
+                    (i >= this.currentPage - delta && i <= this.currentPage + delta)) {
+                    range.push(i);
                 }
-            })
-            return Object.values(latest)
-                .reduce((sum, s) => sum + Number(s.amount || 0), 0)
+            }
+            
+            range.forEach(i => {
+                if (l) {
+                    if (i - l === 2) {
+                        rangeWithDots.push(l + 1);
+                    } else if (i - l !== 1) {
+                        rangeWithDots.push('...');
+                    }
+                }
+                rangeWithDots.push(i);
+                l = i;
+            });
+            
+            return rangeWithDots;
         },
 
-        todayTotal() {
-            const today = new Date()
-                .toISOString()
-                .slice(0, 10)
-
-            return this.operations
-                .filter(op => op.created_at.slice(0, 10) === today)
-                .reduce((sum, op) => sum + Number(op.amount || 0), 0)
+        currentBalance() {
+            if (!this.selectedParticipant) return 0;
+            
+            const participantSnapshots = this.snapshots
+                .filter(s => s.participant_id === this.selectedParticipant)
+                .sort((a, b) => b.created_at.localeCompare(a.created_at));
+            
+            if (participantSnapshots.length === 0) return 0;
+            
+            return Number(participantSnapshots[0].amount || 0);
         }
     },
 
     methods: {
-
         async login() {
-
-            const { data, error } =
-                await sb.auth.signInWithPassword({
+            try {
+                const { data, error } = await sb.auth.signInWithPassword({
                     email: this.email,
                     password: this.password
-                })
-
-            if (error) {
-                alert(error.message)
-                return
+                });
+                if (error) throw error;
+                this.user = data.user;
+                await this.loadData();
+                this.email = '';
+                this.password = '';
+            } catch (error) {
+                alert(error.message);
             }
-
-            this.user = data.user
-            await this.loadData()
         },
 
         async logout() {
-            await sb.auth.signOut()
-            location.reload()
+            await sb.auth.signOut();
+            this.user = null;
+            this.participants = [];
+            this.operations = [];
+            this.snapshots = [];
+            this.selectedParticipant = null;
+            this.newOperation = { to: null, amount: 0 };
+            this.currentPage = 1;
         },
 
         async loadData() {
+            const { data: participants } = await sb
+                .from('Participants')
+                .select('*')
+                .order('id');
+            this.participants = participants || [];
 
-            const participantsRes =
-                await sb
-                    .from("Participants")
-                    .select("*")
-                    .order("id")
+            const { data: operations } = await sb
+                .from('Operations')
+                .select('*')
+                .order('created_at', { ascending: false });
+            this.operations = operations || [];
 
-            this.participants = participantsRes.data || []
+            const { data: snapshots } = await sb
+                .from('Snapshot')
+                .select('*');
+            this.snapshots = snapshots || [];
 
-            const operationsRes =
-                await sb
-                    .from("Operations")
-                    .select("*")
-                    .order("created_at")
-
-            this.operations = operationsRes.data || []
-
-            const snapshotsRes =
-                await sb
-                    .from("Snapshot")
-                    .select("*")
-
-            this.snapshots = snapshotsRes.data || []
-
-            if (
-                !this.selectedParticipant &&
-                this.participants.length
-            ) {
-                this.selectedParticipant = this.participants[0].id
+            if (!this.selectedParticipant && this.participants.length) {
+                this.selectedParticipant = this.participants[0].id;
             }
-
-            this.buildRows()
-
-            this.participants = participantsRes.data || []
-
-            console.log(this.participants, this.operations, this.snapshots)
+            
+            this.currentPage = 1;
         },
 
-        buildRows() {
-            const map = {}
-
-            this.operations.forEach(op => {
-                const date = op.created_at.slice(0, 10)
-
-                if (!map[date]) {
-                    map[date] = {
-                        date,
-                        values: {}
-                    }
-                }
-
-                map[date].values[op.from] = {
-                    id: op.id,
-                    amount: op.amount,
-                    from: op.from,
-                    to: op.to
-                }
-            })
-
-            this.rows = Object.values(map)
-                .sort((a, b) => b.date.localeCompare(a.date))
+        getParticipantName(id) {
+            const participant = this.participants.find(p => p.id === id);
+            return participant ? participant.name : 'Неизвестно';
         },
 
-        rowTotal(row) {
-            return Object.values(row.values)
-                .reduce((sum, v) => sum + Number(v || 0), 0)
+        formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('ru-RU', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+        },
+
+        nextPage() {
+            if (this.currentPage < this.totalPages) {
+                this.currentPage++;
+            }
+        },
+
+        prevPage() {
+            if (this.currentPage > 1) {
+                this.currentPage--;
+            }
+        },
+
+        goToPage(page) {
+            if (page !== '...' && page >= 1 && page <= this.totalPages) {
+                this.currentPage = page;
+            }
         },
 
         async updateSnapshot(participantId, delta) {
-
-            const latest = this.snapshots
+            const participantSnapshots = this.snapshots
                 .filter(s => s.participant_id === participantId)
-                .sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
-
-            const currentAmount = latest ? Number(latest.amount) : 0
-
-            await sb
-                .from("Snapshot")
+                .sort((a, b) => b.created_at.localeCompare(a.created_at));
+            
+            const latestSnapshot = participantSnapshots[0];
+            const currentAmount = latestSnapshot ? Number(latestSnapshot.amount) : 0;
+            
+            const { error } = await sb
+                .from('Snapshot')
                 .insert({
                     participant_id: participantId,
                     amount: currentAmount + delta,
                     created_at: new Date().toISOString()
-                })
+                });
+            
+            if (error) {
+                console.error('Error updating snapshot:', error);
+                throw error;
+            }
         },
 
         async createOperation() {
-
-            const { from, to, amount } = this.newOperation
-
-            await sb
-                .from("Operations")
+            const { to, amount } = this.newOperation;
+            
+            if (!this.selectedParticipant) {
+                alert('Выберите участника');
+                return;
+            }
+            
+            if (!to || amount <= 0) {
+                alert('Заполните все поля');
+                return;
+            }
+            
+            let operationDate;
+            if (this.manualDate && this.selectedDate) {
+                operationDate = this.selectedDate;
+            } else {
+                operationDate = new Date().toISOString().slice(0, 10);
+            }
+            
+            const fullDateTime = `${operationDate}T12:00:00Z`;
+            
+            const { error: opError } = await sb
+                .from('Operations')
                 .insert({
-                    from,
-                    to,
-                    amount,
-                    created_at: new Date().toISOString()
-                })
-
-            await this.updateSnapshot(from, -amount)
-            await this.updateSnapshot(to, +amount)
-
-            this.newOperation.amount = 0
-
-            await this.loadData()
+                    from: this.selectedParticipant,
+                    to: to,
+                    amount: amount,
+                    created_at: fullDateTime
+                });
+            
+            if (opError) {
+                alert('Ошибка при создании операции');
+                console.error(opError);
+                return;
+            }
+            
+            await this.updateSnapshot(this.selectedParticipant, -amount);
+            await this.updateSnapshot(to, +amount);
+            
+            this.newOperation.amount = 0;
+            this.newOperation.to = null;
+            this.manualDate = false;
+            this.selectedDate = new Date().toISOString().slice(0, 10);
+            
+            await this.loadData();
         },
 
         async saveAllOperations() {
-
-            for (const op of this.filteredOperations) {
-                await sb
-                    .from("Operations")
-                    .update({
-                        amount: op.amount
-                    })
-                    .eq("id", op.id)
+            try {
+                // Сохраняем только те операции, которые были изменены
+                for (const operation of this.paginatedOperations) {
+                    // Находим оригинальную операцию в массиве operations
+                    const originalOp = this.operations.find(o => o.id === operation.id);
+                    
+                    // Проверяем, изменилась ли сумма
+                    if (originalOp && Number(originalOp.amount) !== Number(operation.amount)) {
+                        console.log(`Сохранение операции ${operation.id}: ${originalOp.amount} -> ${operation.amount}`);
+                        
+                        // Обновляем операцию в БД
+                        const { error: updateError } = await sb
+                            .from('Operations')
+                            .update({ amount: Number(operation.amount) })
+                            .eq('id', operation.id);
+                        
+                        if (updateError) {
+                            console.error('Ошибка при обновлении:', updateError);
+                            alert(`Ошибка при сохранении операции ${operation.id}: ${updateError.message}`);
+                            return;
+                        }
+                        
+                        // Рассчитываем разницу для снапшотов
+                        const delta = Number(operation.amount) - Number(originalOp.amount);
+                        
+                        // Обновляем снапшот отправителя
+                        await this.updateSnapshot(operation.from, -delta);
+                        
+                        // Обновляем снапшот получателя
+                        await this.updateSnapshot(operation.to, +delta);
+                    }
+                }
+                
+                // Перезагружаем данные
+                await this.loadData();
+                alert('Изменения успешно сохранены');
+                
+            } catch (error) {
+                console.error('Ошибка при сохранении:', error);
+                alert('Произошла ошибка при сохранении. Проверьте консоль.');
             }
+        }
+    },
 
-            await this.loadData()
-        },
+    watch: {
+        selectedParticipant() {
+            this.newOperation.to = null;
+            this.newOperation.amount = 0;
+            this.currentPage = 1;
+        }
     },
 
     async mounted() {
-
-        const result = await sb.auth.getUser()
-
-        this.user = result.data.user
-
-        if (this.user)
-            await this.loadData()
+        const { data } = await sb.auth.getUser();
+        this.user = data.user;
+        if (this.user) {
+            await this.loadData();
+        }
     }
-
-}).mount("#app")
+}).mount('#app');

@@ -2,154 +2,119 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Debt Tracker</title>
-
     <link rel="stylesheet" href="style.css">
-
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
 <div id="app">
-
     <div v-if="!user" class="login">
-
         <h2>Вход</h2>
-
-        <input
-                v-model="email"
-                placeholder="Email"
-        >
-
-        <input
-                type="password"
-                v-model="password"
-                placeholder="Password"
-        >
-
-        <button @click="login">
-            Войти
-        </button>
-
+        <input v-model="email" placeholder="Email" type="email">
+        <input type="password" v-model="password" placeholder="Пароль">
+        <button @click="login">Войти</button>
     </div>
 
     <div v-else class="main">
-        <select v-model="selectedParticipant">
-            <option
-                v-for="participant in participants"
-                :key="participant.id"
-                :value="participant.id"
-            >
-                {{ participant.name }}
-            </option>
-        </select>
+        <button class="logout" @click="logout">Выйти</button>
 
-        <div class="top">
+        <div class="top-panel">
+            <select v-model="selectedParticipant" class="select-participant">
+                <option v-for="participant in participants" :key="participant.id" :value="participant.id">
+                    {{ participant.name }}
+                </option>
+            </select>
+            
+            <div class="stats-container">
+                <div class="stat-card">
+                    <h3>Текущий баланс</h3>
+                    <div class="stat-value">{{ currentBalance }} ₽</div>
+                </div>
+            </div>
+        </div>
 
-            <div class="table-container">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Кому</th>
+                        <th>Сумма</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="op in paginatedOperations" :key="op.id">
+                        <td>{{ formatDate(op.created_at) }}</td>
+                        <td>{{ getParticipantName(op.to) }}</td>
+                        <td>
+                            <input 
+                                type="number" 
+                                v-model.number="op.amount"
+                                class="amount-input"
+                            >
+                        </td>
+                    </tr>
+                    <tr v-if="paginatedOperations.length === 0">
+                        <td colspan="3" style="text-align: center; padding: 40px;">
+                            Нет операций
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
-                <table>
-
-                    <thead>
-                        <tr>
-                            <th>Дата</th>
-                            <th>Кому</th>
-                            <th>Сумма</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-
-                        <tr
-                            v-for="op in filteredOperations"
-                            :key="op.id"
-                        >
-                            <td>{{ op.created_at.slice(0, 10) }}</td>
-
-                            <td>
-                                {{ participants.find(p => p.id === op.to)?.name }}
-                            </td>
-
-                            <td>
-                                <input
-                                    type="number"
-                                    v-model.number="op.amount"
-                                >
-                            </td>
-                        </tr>
-
-                    </tbody>
-
-                </table>
-
-                <button @click="saveAllOperations">
-                    Сохранить изменения
+        <div class="pagination" v-if="totalPages > 1">
+            <button class="pagination-btn" @click="prevPage" :disabled="currentPage === 1">
+                Назад
+            </button>
+            
+            <div class="pagination-pages">
+                <button v-for="page in pageNumbers" :key="page" class="page-btn"
+                    :class="{ active: currentPage === page, dots: page === '...' }"
+                    @click="goToPage(page)" :disabled="page === '...'">
+                    {{ page }}
                 </button>
-
             </div>
+            
+            <button class="pagination-btn" @click="nextPage" :disabled="currentPage === totalPages">
+                Вперед
+            </button>
+        </div>
+        
+        <div class="pagination-info" v-if="allOperations.length > 0">
+            {{ (currentPage - 1) * rowsPerPage + 1 }} - {{ Math.min(currentPage * rowsPerPage, allOperations.length) }} из {{ allOperations.length }} операций
+        </div>
 
-            <div class="sidebar">
-
-                <div class="card">
-                    <h3>Сумма за день</h3>
-                    <div>{{ todayTotal }}</div>
-                </div>
-
-                <div class="card">
-                    <h3>Общий баланс</h3>
-                    <div>{{ totalBalance }}</div>
-                </div>
-
-            </div>
-
+        <div class="action-buttons">
+            <button class="btn-save" @click="saveAllOperations">
+                Сохранить изменения
+            </button>
         </div>
 
         <div class="operation-form">
-
-            <select v-model="newOperation.from">
-
-                <option
-                        v-for="participant in participants"
-                        :value="participant.id"
+            <div class="date-control">
+                <label class="checkbox-label">
+                    <input type="checkbox" v-model="manualDate">
+                    Указать дату вручную
+                </label>
+                <input 
+                    type="date" 
+                    v-model="selectedDate" 
+                    :disabled="!manualDate"
+                    class="date-input"
                 >
-                    {{ participant.name }}
-                </option>
-
-            </select>
-
+            </div>
+            
             <select v-model="newOperation.to">
-
-                <option
-                        v-for="participant in participants"
-                        :value="participant.id"
-                >
-                    {{ participant.name }}
-                </option>
-
+                <option v-for="p in participants" :value="p.id">{{ p.name }}</option>
             </select>
-
-            <input
-                    type="number"
-                    v-model.number="newOperation.amount"
-                    placeholder="Сумма"
-            >
-
-            <button @click="createOperation">
-                Сохранить
-            </button>
-
+            <input type="number" v-model.number="newOperation.amount" placeholder="Сумма">
+            <button @click="createOperation">Добавить перевод</button>
         </div>
-
-        <button
-                class="logout"
-                @click="logout"
-        >
-            Выйти
-        </button>
-
     </div>
-
 </div>
 
 <script src="config.js"></script>
