@@ -1,16 +1,18 @@
-import { createApp } from 'vue'
-import { createClient } from '@supabase/supabase-js'
+const { createApp } = Vue;
 
-// Используем новые publishable ключи
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+// Импорт из переменных окружения
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    console.error('Missing Supabase configuration!')
-    throw new Error('Supabase configuration is required')
+// Проверка наличия переменных
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.error('❌ Ошибка: переменные окружения не найдены!');
+    console.error('Создайте файл .env с VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY');
+    throw new Error('Missing Supabase configuration');
 }
 
-const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+// Создаем клиент с именем sb, не supabase
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 createApp({
     data() {
@@ -250,16 +252,12 @@ createApp({
 
         async saveAllOperations() {
             try {
-                // Сохраняем только те операции, которые были изменены
                 for (const operation of this.paginatedOperations) {
-                    // Находим оригинальную операцию в массиве operations
                     const originalOp = this.operations.find(o => o.id === operation.id);
                     
-                    // Проверяем, изменилась ли сумма
                     if (originalOp && Number(originalOp.amount) !== Number(operation.amount)) {
                         console.log(`Сохранение операции ${operation.id}: ${originalOp.amount} -> ${operation.amount}`);
                         
-                        // Обновляем операцию в БД
                         const { error: updateError } = await sb
                             .from('Operations')
                             .update({ amount: Number(operation.amount) })
@@ -271,18 +269,12 @@ createApp({
                             return;
                         }
                         
-                        // Рассчитываем разницу для снапшотов
                         const delta = Number(operation.amount) - Number(originalOp.amount);
-                        
-                        // Обновляем снапшот отправителя
                         await this.updateSnapshot(operation.from, -delta);
-                        
-                        // Обновляем снапшот получателя
                         await this.updateSnapshot(operation.to, +delta);
                     }
                 }
                 
-                // Перезагружаем данные
                 await this.loadData();
                 alert('Изменения успешно сохранены');
                 
