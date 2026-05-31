@@ -1,5 +1,8 @@
 const { createApp } = Vue;
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY  // Используем Publishable key
+);
 
 createApp({
     data() {
