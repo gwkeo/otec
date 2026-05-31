@@ -1,8 +1,18 @@
 const { createApp } = Vue;
-const sb = createClient(
-    import.meta.env.VITE_SUPABASE_URL,
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY  // Используем Publishable key
-);
+
+import { createApp } from 'vue'
+import { createClient } from '@supabase/supabase-js'
+
+// Используем новые publishable ключи
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    console.error('Missing Supabase configuration!')
+    throw new Error('Supabase configuration is required')
+}
+
+const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
 createApp({
     data() {
