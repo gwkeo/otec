@@ -35,6 +35,15 @@
     </div>
 
     <div v-else class="main">
+        <select v-model="selectedParticipant">
+            <option
+                v-for="participant in participants"
+                :key="participant.id"
+                :value="participant.id"
+            >
+                {{ participant.name }}
+            </option>
+        </select>
 
         <div class="top">
 
@@ -43,45 +52,40 @@
                 <table>
 
                     <thead>
-
-                    <tr>
-                        <th>Дата</th>
-
-                        <th
-                                v-for="participant in participants"
-                                :key="participant.id"
-                        >
-                            {{ participant.name }}
-                        </th>
-
-                        <th>Итого</th>
-                    </tr>
-
+                        <tr>
+                            <th>Дата</th>
+                            <th>Кому</th>
+                            <th>Сумма</th>
+                        </tr>
                     </thead>
 
                     <tbody>
 
-                    <tr
-                            v-for="row in rows"
-                            :key="row.date"
-                    >
-
-                        <td>{{ row.date }}</td>
-
-                        <td
-                                v-for="participant in participants"
-                                :key="participant.id"
+                        <tr
+                            v-for="op in filteredOperations"
+                            :key="op.id"
                         >
-                            {{ row.values[participant.id] || '' }}
-                        </td>
+                            <td>{{ op.created_at.slice(0, 10) }}</td>
 
-                        <td class="total-cell">{{ rowTotal(row) }}</td>
+                            <td>
+                                {{ participants.find(p => p.id === op.to)?.name }}
+                            </td>
 
-                    </tr>
+                            <td>
+                                <input
+                                    type="number"
+                                    v-model.number="op.amount"
+                                >
+                            </td>
+                        </tr>
 
                     </tbody>
 
                 </table>
+
+                <button @click="saveAllOperations">
+                    Сохранить изменения
+                </button>
 
             </div>
 

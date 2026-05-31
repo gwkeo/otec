@@ -23,11 +23,21 @@ createApp({
                 from: null,
                 to: null,
                 amount: 0
-            }
+            },
+            selectedParticipant: null
         }
     },
 
     computed: {
+        filteredOperations() {
+
+            if (!this.selectedParticipant)
+                return []
+
+            return this.operations.filter(
+                op => op.from === this.selectedParticipant
+            )
+        },
 
         totalBalance() {
             const latest = {}
@@ -101,24 +111,39 @@ createApp({
 
             this.snapshots = snapshotsRes.data || []
 
+            if (
+                !this.selectedParticipant &&
+                this.participants.length
+            ) {
+                this.selectedParticipant = this.participants[0].id
+            }
+
             this.buildRows()
+
+            this.participants = participantsRes.data || []
+
+            console.log(this.participants, this.operations, this.snapshots)
         },
 
         buildRows() {
-
             const map = {}
 
             this.operations.forEach(op => {
-
                 const date = op.created_at.slice(0, 10)
 
                 if (!map[date]) {
-                    map[date] = { date, values: {} }
+                    map[date] = {
+                        date,
+                        values: {}
+                    }
                 }
 
-                const id = op.from
-                map[date].values[id] =
-                    (map[date].values[id] || 0) + Number(op.amount || 0)
+                map[date].values[op.from] = {
+                    id: op.id,
+                    amount: op.amount,
+                    from: op.from,
+                    to: op.to
+                }
             })
 
             this.rows = Object.values(map)
@@ -166,7 +191,21 @@ createApp({
             this.newOperation.amount = 0
 
             await this.loadData()
-        }
+        },
+
+        async saveAllOperations() {
+
+            for (const op of this.filteredOperations) {
+                await sb
+                    .from("Operations")
+                    .update({
+                        amount: op.amount
+                    })
+                    .eq("id", op.id)
+            }
+
+            await this.loadData()
+        },
     },
 
     async mounted() {
