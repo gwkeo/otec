@@ -1,18 +1,10 @@
-const { createApp } = Vue;
+import { createApp } from 'vue'
+import { createClient } from '@supabase/supabase-js'
 
-// Импорт из переменных окружения
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-// Проверка наличия переменных
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.error('❌ Ошибка: переменные окружения не найдены!');
-    console.error('Создайте файл .env с VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY');
-    throw new Error('Missing Supabase configuration');
-}
-
-// Создаем клиент с именем sb, не supabase
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 createApp({
     data() {
@@ -23,6 +15,7 @@ createApp({
             participants: [],
             operations: [],
             snapshots: [],
+            originalAmounts: {},
             selectedParticipant: null,
             newOperation: {
                 to: null,
@@ -91,7 +84,7 @@ createApp({
             
             if (participantSnapshots.length === 0) return 0;
             
-            return Number(participantSnapshots[0].amount || 0);
+            return Number(participantSnapshots[0].last_amount || 0);
         }
     },
 
@@ -141,6 +134,11 @@ createApp({
                 .select('*');
             this.snapshots = snapshots || [];
 
+            this.originalAmounts = {};
+            (operations || []).forEach(op => {
+                this.originalAmounts[op.id] = op.amount;
+            });
+
             if (!this.selectedParticipant && this.participants.length) {
                 this.selectedParticipant = this.participants[0].id;
             }
@@ -186,13 +184,13 @@ createApp({
                 .sort((a, b) => b.created_at.localeCompare(a.created_at));
             
             const latestSnapshot = participantSnapshots[0];
-            const currentAmount = latestSnapshot ? Number(latestSnapshot.amount) : 0;
-            
+            const currentAmount = latestSnapshot ? Number(latestSnapshot.last_amount) : 0;
+
             const { error } = await sb
                 .from('Snapshot')
                 .insert({
                     participant_id: participantId,
-                    amount: currentAmount + delta,
+                    last_amount: currentAmount + delta,
                     created_at: new Date().toISOString()
                 });
             
@@ -252,24 +250,22 @@ createApp({
 
         async saveAllOperations() {
             try {
-                for (const operation of this.paginatedOperations) {
-                    const originalOp = this.operations.find(o => o.id === operation.id);
-                    
-                    if (originalOp && Number(originalOp.amount) !== Number(operation.amount)) {
-                        console.log(`Сохранение операции ${operation.id}: ${originalOp.amount} -> ${operation.amount}`);
-                        
+                for (const operation of this.allOperations) {
+                    const originalAmount = this.originalAmounts[operation.id];
+
+                    if (originalAmount !== undefined && Number(originalAmount) !== Number(operation.amount)) {
                         const { error: updateError } = await sb
                             .from('Operations')
                             .update({ amount: Number(operation.amount) })
                             .eq('id', operation.id);
-                        
+
                         if (updateError) {
                             console.error('Ошибка при обновлении:', updateError);
                             alert(`Ошибка при сохранении операции ${operation.id}: ${updateError.message}`);
                             return;
                         }
-                        
-                        const delta = Number(operation.amount) - Number(originalOp.amount);
+
+                        const delta = Number(operation.amount) - Number(originalAmount);
                         await this.updateSnapshot(operation.from, -delta);
                         await this.updateSnapshot(operation.to, +delta);
                     }
