@@ -24,7 +24,13 @@ createApp({
             manualDate: false,
             selectedDate: new Date().toISOString().slice(0, 10),
             currentPage: 1,
-            rowsPerPage: 10
+            rowsPerPage: 10,
+            workerParticipantTypeId: null,
+            isLoadingWorkerType: false,
+            workerTypeError: null,
+            newWorker: {
+                name: ''
+            }
         };
     },
 
@@ -142,8 +148,41 @@ createApp({
             if (!this.selectedParticipant && this.participants.length) {
                 this.selectedParticipant = this.participants[0].id;
             }
-            
+
+            await this.loadWorkerParticipantType();
+
             this.currentPage = 1;
+        },
+
+        async loadWorkerParticipantType() {
+            try {
+                this.isLoadingWorkerType = true;
+                this.workerTypeError = null;
+
+                const { data, error } = await sb
+                    .from('participant_types')
+                    .select('id')
+                    .eq('code', 'worker')
+                    .single();
+
+                if (error) {
+                    if (error.code === 'PGRST116') {
+                        this.workerTypeError = 'Не найден тип participant_type "worker"';
+                    } else {
+                        this.workerTypeError = `Ошибка при загрузке типа worker: ${error.message}`;
+                    }
+                    this.workerParticipantTypeId = null;
+                } else if (data) {
+                    this.workerParticipantTypeId = data.id;
+                    this.workerTypeError = null;
+                }
+            } catch (err) {
+                console.error('Error loading worker participant type:', err);
+                this.workerTypeError = 'Ошибка при загрузке типа worker';
+                this.workerParticipantTypeId = null;
+            } finally {
+                this.isLoadingWorkerType = false;
+            }
         },
 
         getParticipantName(id) {
@@ -202,26 +241,26 @@ createApp({
 
         async createOperation() {
             const { to, amount } = this.newOperation;
-            
+
             if (!this.selectedParticipant) {
                 alert('Выберите участника');
                 return;
             }
-            
+
             if (!to || amount <= 0) {
                 alert('Заполните все поля');
                 return;
             }
-            
+
             let operationDate;
             if (this.manualDate && this.selectedDate) {
                 operationDate = this.selectedDate;
             } else {
                 operationDate = new Date().toISOString().slice(0, 10);
             }
-            
+
             const fullDateTime = `${operationDate}T12:00:00Z`;
-            
+
             const { error: opError } = await sb
                 .from('Operations')
                 .insert({
@@ -230,22 +269,56 @@ createApp({
                     amount: amount,
                     created_at: fullDateTime
                 });
-            
+
             if (opError) {
                 alert('Ошибка при создании операции');
                 console.error(opError);
                 return;
             }
-            
+
             await this.updateSnapshot(this.selectedParticipant, -amount);
             await this.updateSnapshot(to, +amount);
-            
+
             this.newOperation.amount = 0;
             this.newOperation.to = null;
             this.manualDate = false;
             this.selectedDate = new Date().toISOString().slice(0, 10);
-            
+
             await this.loadData();
+        },
+
+        async createWorkerParticipant() {
+            if (!this.newWorker.name.trim()) {
+                alert('Введите имя worker');
+                return;
+            }
+
+            if (!this.workerParticipantTypeId) {
+                alert(this.workerTypeError || 'Не найден тип participant_type "worker"');
+                return;
+            }
+
+            try {
+                const { error } = await sb
+                    .from('Participants')
+                    .insert({
+                        name: this.newWorker.name.trim(),
+                        participant_type_id: this.workerParticipantTypeId
+                    });
+
+                if (error) {
+                    alert(`Ошибка при создании worker: ${error.message}`);
+                    console.error(error);
+                    return;
+                }
+
+                this.newWorker.name = '';
+                await this.loadData();
+                alert('Worker успешно создан');
+            } catch (err) {
+                console.error('Error creating worker participant:', err);
+                alert('Ошибка при создании worker');
+            }
         },
 
         async saveAllOperations() {

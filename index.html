@@ -92,20 +92,42 @@
             </button>
         </div>
 
+        <div class="worker-creation-section">
+            <h3>Создать Worker</h3>
+            <div v-if="workerTypeError" class="error-message">
+                {{ workerTypeError }}
+            </div>
+            <div v-else class="worker-form">
+                <input
+                    v-model="newWorker.name"
+                    placeholder="Имя worker участника"
+                    class="worker-input"
+                    :disabled="!workerParticipantTypeId"
+                >
+                <button
+                    @click="createWorkerParticipant"
+                    class="btn-create-worker"
+                    :disabled="!workerParticipantTypeId || isLoadingWorkerType"
+                >
+                    {{ isLoadingWorkerType ? 'Загрузка...' : 'Создать' }}
+                </button>
+            </div>
+        </div>
+
         <div class="operation-form">
             <div class="date-control">
                 <label class="checkbox-label">
                     <input type="checkbox" v-model="manualDate">
                     Указать дату вручную
                 </label>
-                <input 
-                    type="date" 
-                    v-model="selectedDate" 
+                <input
+                    type="date"
+                    v-model="selectedDate"
                     :disabled="!manualDate"
                     class="date-input"
                 >
             </div>
-            
+
             <select v-model="newOperation.to">
                 <option v-for="p in participants" :value="p.id">{{ p.name }}</option>
             </select>
