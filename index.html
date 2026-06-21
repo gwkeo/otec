@@ -16,8 +16,24 @@
         <button @click="login">Войти</button>
     </div>
 
-    <div v-else class="main">
-        <button class="logout" @click="logout">Выйти</button>
+    <div v-else-if="roleLoading" class="loading">
+        <p>Загрузка профиля...</p>
+    </div>
+
+    <div v-else-if="roleError" class="error">
+        <h2>Ошибка загрузки профиля</h2>
+        <p>{{ roleError }}</p>
+        <button @click="logout">Вернуться на вход</button>
+    </div>
+
+    <div v-else-if="isAdmin" class="main admin-panel">
+        <button class="logout" @click="logout">Выйти (Admin)</button>
+        <h1>Панель администратора</h1>
+        <p style="color: #6b7280; margin-top: 8px;">Функциональность администратора будет добавлена в следующих версиях</p>
+    </div>
+
+    <div v-else-if="isWorker" class="main worker-panel">
+        <button class="logout" @click="logout">Выйти (Worker)</button>
 
         <div class="top-panel">
             <select v-model="selectedParticipant" class="select-participant">
@@ -39,24 +55,30 @@
                 <thead>
                     <tr>
                         <th>Дата</th>
-                        <th>Кому</th>
+                        <th>Тип</th>
+                        <th>Контрагент</th>
                         <th>Сумма</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="op in paginatedOperations" :key="op.id">
+                    <tr v-for="op in paginatedOperations" :key="op.id" :class="{ 'income-row': op.isIncome, 'expense-row': !op.isIncome }">
                         <td>{{ formatDate(op.created_at) }}</td>
-                        <td>{{ getParticipantName(op.to) }}</td>
+                        <td class="operation-type">
+                            <span :class="op.isIncome ? 'badge-income' : 'badge-expense'">
+                                {{ op.isIncome ? '↓ Доход' : '↑ Расход' }}
+                            </span>
+                        </td>
+                        <td>{{ getParticipantName(op.counterparty) }}</td>
                         <td>
-                            <input 
-                                type="number" 
+                            <input
+                                type="number"
                                 v-model.number="op.amount"
                                 class="amount-input"
                             >
                         </td>
                     </tr>
                     <tr v-if="paginatedOperations.length === 0">
-                        <td colspan="3" style="text-align: center; padding: 40px;">
+                        <td colspan="4" style="text-align: center; padding: 40px;">
                             Нет операций
                         </td>
                     </tr>
@@ -92,47 +114,73 @@
             </button>
         </div>
 
-        <div class="worker-creation-section">
-            <h3>Создать Worker</h3>
-            <div v-if="workerTypeError" class="error-message">
-                {{ workerTypeError }}
-            </div>
-            <div v-else class="worker-form">
-                <input
-                    v-model="newWorker.name"
-                    placeholder="Имя worker участника"
-                    class="worker-input"
-                    :disabled="!workerParticipantTypeId"
-                >
-                <button
-                    @click="createWorkerParticipant"
-                    class="btn-create-worker"
-                    :disabled="!workerParticipantTypeId || isLoadingWorkerType"
-                >
-                    {{ isLoadingWorkerType ? 'Загрузка...' : 'Создать' }}
-                </button>
-            </div>
-        </div>
-
         <div class="operation-form">
-            <div class="date-control">
-                <label class="checkbox-label">
-                    <input type="checkbox" v-model="manualDate">
-                    Указать дату вручную
-                </label>
-                <input
-                    type="date"
-                    v-model="selectedDate"
-                    :disabled="!manualDate"
-                    class="date-input"
-                >
+            <h3>Новая операция</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Точка</label>
+                    <select v-model.number="newOperation.shop_id" required>
+                        <option value="" disabled>Выберите точку</option>
+                        <option v-for="shop in myShops" :key="shop" :value="shop">
+                            Магазин {{ shop }}
+                        </option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Дата</label>
+                    <input type="date" v-model="newOperation.op_date" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Тип</label>
+                    <select v-model="newOperation.kind" required>
+                        <option value="revenue">Доход</option>
+                        <option value="expense">Расход</option>
+                        <option value="transfer">Перевод</option>
+                        <option value="salary_accrual">Начисление зарплаты</option>
+                        <option value="salary_draw">Выплата зарплаты</option>
+                        <option value="goods">Товары</option>
+                        <option value="adjustment">Корректировка</option>
+                    </select>
+                </div>
             </div>
 
-            <select v-model="newOperation.to">
-                <option v-for="p in participants" :value="p.id">{{ p.name }}</option>
-            </select>
-            <input type="number" v-model.number="newOperation.amount" placeholder="Сумма">
-            <button @click="createOperation">Добавить перевод</button>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>От</label>
+                    <select v-model.number="newOperation.from" required>
+                        <option value="" disabled>Выберите</option>
+                        <option v-for="p in participants" :key="p.id" :value="p.id">
+                            {{ p.name }}
+                        </option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Кому</label>
+                    <select v-model.number="newOperation.to" required>
+                        <option value="" disabled>Выберите</option>
+                        <option v-for="p in participants" :key="p.id" :value="p.id">
+                            {{ p.name }}
+                        </option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Сумма (₽)</label>
+                    <input type="number" v-model.number="newOperation.amount" placeholder="0" required min="0">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group full-width">
+                    <label>Заметка</label>
+                    <input type="text" v-model="newOperation.note" placeholder="Необязательное поле">
+                </div>
+            </div>
+
+            <button @click="createOperation" class="btn-create-operation">Создать операцию</button>
         </div>
     </div>
 </div>

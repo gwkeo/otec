@@ -18,8 +18,14 @@ createApp({
             originalAmounts: {},
             selectedParticipant: null,
             newOperation: {
+                shop_id: null,
+                from: null,
                 to: null,
-                amount: 0
+                amount: 0,
+                op_date: new Date().toISOString().slice(0, 10),
+                kind: 'transfer',
+                currency: 'RUB',
+                note: ''
             },
             manualDate: false,
             selectedDate: new Date().toISOString().slice(0, 10),
@@ -30,17 +36,36 @@ createApp({
             workerTypeError: null,
             newWorker: {
                 name: ''
-            }
+            },
+            userRole: null,
+            currentPersonId: null,
+            myShops: [],
+            roleLoading: true,
+            roleError: null,
+            selectedShop: null
         };
     },
 
     computed: {
+        isAdmin() {
+            return this.userRole === 'admin';
+        },
+
+        isWorker() {
+            return this.userRole === 'worker';
+        },
+
         allOperations() {
             if (!this.selectedParticipant) return [];
-            
-            return this.operations.filter(
-                op => op.from === this.selectedParticipant
-            );
+
+            return this.operations
+                .filter(op => op.from === this.selectedParticipant || op.to === this.selectedParticipant)
+                .map(op => ({
+                    ...op,
+                    isIncome: op.to === this.selectedParticipant,
+                    counterparty: op.to === this.selectedParticipant ? op.from : op.to
+                }))
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         },
         
         totalPages() {
@@ -103,6 +128,7 @@ createApp({
                 });
                 if (error) throw error;
                 this.user = data.user;
+                await this.loadUserRole();
                 await this.loadData();
                 this.email = '';
                 this.password = '';
@@ -114,44 +140,92 @@ createApp({
         async logout() {
             await sb.auth.signOut();
             this.user = null;
+            this.userRole = null;
+            this.currentPersonId = null;
+            this.myShops = [];
             this.participants = [];
             this.operations = [];
             this.snapshots = [];
             this.selectedParticipant = null;
+            this.selectedShop = null;
             this.newOperation = { to: null, amount: 0 };
             this.currentPage = 1;
         },
 
-        async loadData() {
-            const { data: participants } = await sb
-                .from('Participants')
-                .select('*')
-                .order('id');
-            this.participants = participants || [];
+        async loadUserRole() {
+            try {
+                this.roleLoading = true;
+                this.roleError = null;
 
-            const { data: operations } = await sb
-                .from('Operations')
-                .select('*')
-                .order('created_at', { ascending: false });
-            this.operations = operations || [];
+                const { data: isAdmin, error: adminError } = await sb.rpc('is_admin');
+                if (adminError) throw adminError;
 
-            const { data: snapshots } = await sb
-                .from('Snapshot')
-                .select('*');
-            this.snapshots = snapshots || [];
+                const { data: personId, error: personError } = await sb.rpc('current_person_id');
+                if (personError) throw personError;
 
-            this.originalAmounts = {};
-            (operations || []).forEach(op => {
-                this.originalAmounts[op.id] = op.amount;
-            });
+                const { data: shopIds, error: shopsError } = await sb.rpc('user_shop_ids');
+                if (shopsError) throw shopsError;
 
-            if (!this.selectedParticipant && this.participants.length) {
-                this.selectedParticipant = this.participants[0].id;
+                this.userRole = isAdmin ? 'admin' : 'worker';
+                this.currentPersonId = personId;
+                this.myShops = shopIds || [];
+
+                if (this.myShops.length > 0) {
+                    this.selectedShop = this.myShops[0];
+                }
+            } catch (error) {
+                console.error('Error loading user role:', error);
+                this.roleError = error.message;
+                this.userRole = null;
+            } finally {
+                this.roleLoading = false;
             }
+        },
 
-            await this.loadWorkerParticipantType();
+        async loadData() {
+            try {
+                const { data: participants, error: pError } = await sb
+                    .from('Participants')
+                    .select('*')
+                    .order('id');
+                if (pError) throw pError;
+                this.participants = participants || [];
 
-            this.currentPage = 1;
+                let operationsQuery = sb
+                    .from('Operations')
+                    .select('*');
+
+                if (this.isWorker && this.selectedShop) {
+                    operationsQuery = operationsQuery.eq('shop_id', this.selectedShop);
+                }
+
+                const { data: operations, error: opError } = await operationsQuery
+                    .order('op_date', { ascending: false });
+                if (opError) throw opError;
+                this.operations = operations || [];
+
+                const { data: snapshots, error: snapError } = await sb
+                    .from('Snapshot')
+                    .select('*');
+                if (snapError) throw snapError;
+                this.snapshots = snapshots || [];
+
+                this.originalAmounts = {};
+                (operations || []).forEach(op => {
+                    this.originalAmounts[op.id] = op.amount;
+                });
+
+                if (!this.selectedParticipant && this.participants.length) {
+                    this.selectedParticipant = this.participants[0].id;
+                }
+
+                await this.loadWorkerParticipantType();
+
+                this.currentPage = 1;
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert(`Ошибка при загрузке данных: ${error.message}`);
+            }
         },
 
         async loadWorkerParticipantType() {
@@ -240,51 +314,55 @@ createApp({
         },
 
         async createOperation() {
-            const { to, amount } = this.newOperation;
+            const { shop_id, from, to, amount, op_date, kind, currency, note } = this.newOperation;
 
-            if (!this.selectedParticipant) {
-                alert('Выберите участника');
+            if (!shop_id) {
+                alert('Выберите точку');
                 return;
             }
 
-            if (!to || amount <= 0) {
+            if (!from || !to || amount <= 0) {
                 alert('Заполните все поля');
                 return;
             }
 
-            let operationDate;
-            if (this.manualDate && this.selectedDate) {
-                operationDate = this.selectedDate;
-            } else {
-                operationDate = new Date().toISOString().slice(0, 10);
-            }
+            try {
+                const { error } = await sb
+                    .from('Operations')
+                    .insert({
+                        shop_id,
+                        from,
+                        to,
+                        amount: Math.floor(amount),
+                        op_date,
+                        kind,
+                        currency,
+                        note: note || null
+                    });
 
-            const fullDateTime = `${operationDate}T12:00:00Z`;
+                if (error) {
+                    alert(`Ошибка при создании операции: ${error.message}`);
+                    console.error(error);
+                    return;
+                }
 
-            const { error: opError } = await sb
-                .from('Operations')
-                .insert({
-                    from: this.selectedParticipant,
-                    to: to,
-                    amount: amount,
-                    created_at: fullDateTime
-                });
+                this.newOperation = {
+                    shop_id: this.selectedShop || null,
+                    from: this.currentPersonId || null,
+                    to: null,
+                    amount: 0,
+                    op_date: new Date().toISOString().slice(0, 10),
+                    kind: 'transfer',
+                    currency: 'RUB',
+                    note: ''
+                };
 
-            if (opError) {
+                await this.loadData();
+                alert('Операция успешно создана');
+            } catch (error) {
+                console.error('Error creating operation:', error);
                 alert('Ошибка при создании операции');
-                console.error(opError);
-                return;
             }
-
-            await this.updateSnapshot(this.selectedParticipant, -amount);
-            await this.updateSnapshot(to, +amount);
-
-            this.newOperation.amount = 0;
-            this.newOperation.to = null;
-            this.manualDate = false;
-            this.selectedDate = new Date().toISOString().slice(0, 10);
-
-            await this.loadData();
         },
 
         async createWorkerParticipant() {
@@ -323,13 +401,14 @@ createApp({
 
         async saveAllOperations() {
             try {
+                let updated = false;
                 for (const operation of this.allOperations) {
                     const originalAmount = this.originalAmounts[operation.id];
 
                     if (originalAmount !== undefined && Number(originalAmount) !== Number(operation.amount)) {
                         const { error: updateError } = await sb
                             .from('Operations')
-                            .update({ amount: Number(operation.amount) })
+                            .update({ amount: Math.floor(operation.amount) })
                             .eq('id', operation.id);
 
                         if (updateError) {
@@ -337,16 +416,16 @@ createApp({
                             alert(`Ошибка при сохранении операции ${operation.id}: ${updateError.message}`);
                             return;
                         }
-
-                        const delta = Number(operation.amount) - Number(originalAmount);
-                        await this.updateSnapshot(operation.from, -delta);
-                        await this.updateSnapshot(operation.to, +delta);
+                        updated = true;
                     }
                 }
-                
-                await this.loadData();
-                alert('Изменения успешно сохранены');
-                
+
+                if (updated) {
+                    await this.loadData();
+                    alert('Изменения успешно сохранены');
+                } else {
+                    alert('Нет изменений для сохранения');
+                }
             } catch (error) {
                 console.error('Ошибка при сохранении:', error);
                 alert('Произошла ошибка при сохранении. Проверьте консоль.');
@@ -359,6 +438,14 @@ createApp({
             this.newOperation.to = null;
             this.newOperation.amount = 0;
             this.currentPage = 1;
+        },
+
+        selectedShop() {
+            this.newOperation.shop_id = this.selectedShop;
+            this.currentPage = 1;
+            if (this.isWorker) {
+                this.loadData();
+            }
         }
     },
 
@@ -366,6 +453,7 @@ createApp({
         const { data } = await sb.auth.getUser();
         this.user = data.user;
         if (this.user) {
+            await this.loadUserRole();
             await this.loadData();
         }
     }
