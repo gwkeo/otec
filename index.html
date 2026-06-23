@@ -29,7 +29,165 @@
     <div v-else-if="isAdmin" class="main admin-panel">
         <button class="logout" @click="logout">Выйти (Admin)</button>
         <h1>Панель администратора</h1>
-        <p style="color: #6b7280; margin-top: 8px;">Функциональность администратора будет добавлена в следующих версиях</p>
+
+        <div class="admin-tabs">
+            <button
+                v-for="tab in ['dashboard', 'operations', 'participants', 'shop-members', 'salaries']"
+                :key="tab"
+                @click="adminTab = tab"
+                :class="{ active: adminTab === tab }"
+                class="tab-btn"
+            >
+                {{ tab === 'dashboard' ? 'Дашборд' :
+                   tab === 'operations' ? 'Операции' :
+                   tab === 'participants' ? 'Контрагенты' :
+                   tab === 'shop-members' ? 'Работники' :
+                   'Зарплаты' }}
+            </button>
+        </div>
+
+        <!-- Dashboard tab -->
+        <div v-if="adminTab === 'dashboard'" class="admin-tab-content">
+            <h2>Остатки по контрагентам</h2>
+            <div v-if="adminBalances.length === 0" class="empty-state">
+                Нет данных (VIEW не заполнена или нет операций)
+            </div>
+            <table v-else class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Участник</th>
+                        <th>Точка</th>
+                        <th>Валюта</th>
+                        <th>Остаток</th>
+                        <th>День</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="balance in adminBalances" :key="`${balance.participant_id}-${balance.op_date}`">
+                        <td>{{ getParticipantName(balance.participant_id) }}</td>
+                        <td>{{ balance.shop_id || '-' }}</td>
+                        <td>{{ balance.currency }}</td>
+                        <td class="amount">{{ balance.running_total }}</td>
+                        <td>{{ formatDate(balance.op_date) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Operations tab -->
+        <div v-else-if="adminTab === 'operations'" class="admin-tab-content">
+            <h2>Все операции</h2>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Точка</th>
+                        <th>От</th>
+                        <th>Кому</th>
+                        <th>Сумма</th>
+                        <th>Тип</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="op in operations" :key="op.id">
+                        <td>{{ formatDate(op.op_date) }}</td>
+                        <td>{{ op.shop_id || '-' }}</td>
+                        <td>{{ getParticipantName(op.from) }}</td>
+                        <td>{{ getParticipantName(op.to) }}</td>
+                        <td class="amount">{{ op.amount }}</td>
+                        <td>{{ op.kind }}</td>
+                        <td>
+                            <button @click="deleteOperation(op.id)" class="btn-delete">✕</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Participants tab -->
+        <div v-else-if="adminTab === 'participants'" class="admin-tab-content">
+            <h2>Контрагенты</h2>
+            <div class="participant-form">
+                <h3>Добавить контрагента</h3>
+                <input v-model="newParticipant.name" placeholder="Имя" class="form-input">
+                <select v-model="newParticipant.type" class="form-input">
+                    <option value="">Выберите тип</option>
+                    <option v-for="type in participantTypes" :key="type.id" :value="type.code">
+                        {{ type.name }}
+                    </option>
+                </select>
+                <button @click="createParticipant" class="btn-primary">Создать</button>
+            </div>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Имя</th>
+                        <th>Тип</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="p in participants" :key="p.id">
+                        <td>{{ p.id }}</td>
+                        <td>{{ p.name }}</td>
+                        <td>{{ p.participant_type_id }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Shop Members tab -->
+        <div v-else-if="adminTab === 'shop-members'" class="admin-tab-content">
+            <h2>Распределение работников по точкам</h2>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Точка</th>
+                        <th>Работник</th>
+                        <th>Роль</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="member in shopMembers" :key="`${member.shop_id}-${member.person_id}`">
+                        <td>{{ member.shop_id }}</td>
+                        <td>{{ getParticipantName(member.person_id) }}</td>
+                        <td>{{ member.role_at_shop }}</td>
+                    </tr>
+                    <tr v-if="shopMembers.length === 0">
+                        <td colspan="3" style="text-align: center; padding: 40px;">Нет записей</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Salaries tab -->
+        <div v-else-if="adminTab === 'salaries'" class="admin-tab-content">
+            <h2>Зарплаты работников</h2>
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Работник</th>
+                        <th>Дата</th>
+                        <th>Начислено</th>
+                        <th>Выплачено</th>
+                        <th>Остаток</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="salary in workerSalaries" :key="`${salary.worker_id}-${salary.op_date}`">
+                        <td>{{ getParticipantName(salary.worker_id) }}</td>
+                        <td>{{ formatDate(salary.op_date) }}</td>
+                        <td class="amount">{{ salary.accrued }}</td>
+                        <td class="amount">{{ salary.drawn }}</td>
+                        <td class="amount">{{ salary.running_total }}</td>
+                    </tr>
+                    <tr v-if="workerSalaries.length === 0">
+                        <td colspan="5" style="text-align: center; padding: 40px;">Нет данных</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div v-else-if="isWorker" class="main worker-panel">

@@ -42,7 +42,16 @@ createApp({
             myShops: [],
             roleLoading: true,
             roleError: null,
-            selectedShop: null
+            selectedShop: null,
+            adminBalances: [],
+            workerSalaries: [],
+            shopMembers: [],
+            participantTypes: [],
+            newParticipant: {
+                name: '',
+                type: ''
+            },
+            adminTab: 'dashboard'
         };
     },
 
@@ -173,12 +182,32 @@ createApp({
                 if (this.myShops.length > 0) {
                     this.selectedShop = this.myShops[0];
                 }
+
+                if (isAdmin) {
+                    await this.loadAdminDashboard();
+                    await this.loadWorkerSalaries();
+                    await this.loadShopMembers();
+                    await this.loadParticipantTypes();
+                }
             } catch (error) {
                 console.error('Error loading user role:', error);
                 this.roleError = error.message;
                 this.userRole = null;
             } finally {
                 this.roleLoading = false;
+            }
+        },
+
+        async loadParticipantTypes() {
+            try {
+                const { data, error } = await sb
+                    .from('participant_types')
+                    .select('*');
+
+                if (error) throw error;
+                this.participantTypes = data || [];
+            } catch (error) {
+                console.error('Error loading participant types:', error);
             }
         },
 
@@ -429,6 +458,103 @@ createApp({
             } catch (error) {
                 console.error('Ошибка при сохранении:', error);
                 alert('Произошла ошибка при сохранении. Проверьте консоль.');
+            }
+        },
+
+        async loadAdminDashboard() {
+            try {
+                const { data, error } = await sb
+                    .from('v_participant_running_balance')
+                    .select('*')
+                    .order('op_date', { ascending: false });
+
+                if (error) throw error;
+                this.adminBalances = data || [];
+            } catch (error) {
+                console.error('Error loading admin dashboard:', error);
+                alert(`Ошибка при загрузке дашборда: ${error.message}`);
+            }
+        },
+
+        async loadWorkerSalaries() {
+            try {
+                const { data, error } = await sb
+                    .from('v_worker_salary')
+                    .select('*')
+                    .order('op_date', { ascending: false });
+
+                if (error) throw error;
+                this.workerSalaries = data || [];
+            } catch (error) {
+                console.error('Error loading worker salaries:', error);
+                alert(`Ошибка при загрузке зарплаты: ${error.message}`);
+            }
+        },
+
+        async loadShopMembers() {
+            try {
+                const { data, error } = await sb
+                    .from('shop_members')
+                    .select('*')
+                    .order('shop_id');
+
+                if (error) throw error;
+                this.shopMembers = data || [];
+            } catch (error) {
+                console.error('Error loading shop members:', error);
+                alert(`Ошибка при загрузке работников: ${error.message}`);
+            }
+        },
+
+        async createParticipant() {
+            const { name, type } = this.newParticipant;
+
+            if (!name.trim() || !type) {
+                alert('Заполните все поля');
+                return;
+            }
+
+            try {
+                const typeRecord = this.participantTypes.find(t => t.code === type);
+                if (!typeRecord) {
+                    alert('Неверный тип участника');
+                    return;
+                }
+
+                const { error } = await sb
+                    .from('Participants')
+                    .insert({
+                        name: name.trim(),
+                        participant_type_id: typeRecord.id
+                    });
+
+                if (error) throw error;
+
+                this.newParticipant = { name: '', type: '' };
+                await this.loadData();
+                alert('Участник успешно создан');
+            } catch (error) {
+                console.error('Error creating participant:', error);
+                alert(`Ошибка при создании: ${error.message}`);
+            }
+        },
+
+        async deleteOperation(opId) {
+            if (!confirm('Удалить операцию?')) return;
+
+            try {
+                const { error } = await sb
+                    .from('Operations')
+                    .delete()
+                    .eq('id', opId);
+
+                if (error) throw error;
+
+                await this.loadData();
+                alert('Операция удалена');
+            } catch (error) {
+                console.error('Error deleting operation:', error);
+                alert(`Ошибка при удалении: ${error.message}`);
             }
         }
     },
