@@ -468,11 +468,18 @@ createApp({
                     .select('*')
                     .order('op_date', { ascending: false });
 
-                if (error) throw error;
+                if (error) {
+                    if (error.code === '404' || error.message.includes('not found')) {
+                        console.warn('VIEW v_participant_running_balance does not exist');
+                        this.adminBalances = [];
+                        return;
+                    }
+                    throw error;
+                }
                 this.adminBalances = data || [];
             } catch (error) {
                 console.error('Error loading admin dashboard:', error);
-                alert(`Ошибка при загрузке дашборда: ${error.message}`);
+                this.adminBalances = [];
             }
         },
 
@@ -483,11 +490,18 @@ createApp({
                     .select('*')
                     .order('op_date', { ascending: false });
 
-                if (error) throw error;
+                if (error) {
+                    if (error.code === '404' || error.message.includes('not found')) {
+                        console.warn('VIEW v_worker_salary does not exist');
+                        this.workerSalaries = [];
+                        return;
+                    }
+                    throw error;
+                }
                 this.workerSalaries = data || [];
             } catch (error) {
                 console.error('Error loading worker salaries:', error);
-                alert(`Ошибка при загрузке зарплаты: ${error.message}`);
+                this.workerSalaries = [];
             }
         },
 

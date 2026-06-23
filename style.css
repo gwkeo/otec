@@ -558,6 +558,26 @@ tr:last-child td {
     border-radius: 6px;
 }
 
+.empty-state.warning {
+    color: #92400e;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+}
+
+.empty-state code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.empty-state small {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+}
+
 /* Operation form */
 .operation-form {
     background: #f9fafb;

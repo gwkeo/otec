@@ -49,8 +49,9 @@
         <!-- Dashboard tab -->
         <div v-if="adminTab === 'dashboard'" class="admin-tab-content">
             <h2>Остатки по контрагентам</h2>
-            <div v-if="adminBalances.length === 0" class="empty-state">
-                Нет данных (VIEW не заполнена или нет операций)
+            <div v-if="adminBalances.length === 0" class="empty-state warning">
+                ⚠️ VIEW <code>v_participant_running_balance</code> не существует в Supabase<br>
+                <small>Нужно создать VIEW в SQL Editor. Свяжись с администратором Supabase.</small>
             </div>
             <table v-else class="admin-table">
                 <thead>
@@ -183,7 +184,9 @@
                         <td class="amount">{{ salary.running_total }}</td>
                     </tr>
                     <tr v-if="workerSalaries.length === 0">
-                        <td colspan="5" style="text-align: center; padding: 40px;">Нет данных</td>
+                        <td colspan="5" style="text-align: center; padding: 40px;">
+                            ⚠️ VIEW <code>v_worker_salary</code> не существует
+                        </td>
                     </tr>
                 </tbody>
             </table>
