@@ -536,6 +536,30 @@ tr:last-child td {
     background: #2563eb;
 }
 
+.type-filter {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: #374151;
+    cursor: pointer;
+    user-select: none;
+}
+
+.filter-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #3b82f6;
+}
+
 .btn-delete {
     background: #ef4444;
     color: white;
@@ -548,6 +572,60 @@ tr:last-child td {
 
 .btn-delete:hover {
     background: #dc2626;
+}
+
+.actions-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.note-wrap {
+    position: relative;
+    display: inline-block;
+}
+
+.btn-note {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+
+.btn-note:hover,
+.btn-note.active {
+    opacity: 1;
+}
+
+.note-popup {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1f2937;
+    color: #f9fafb;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    white-space: pre-wrap;
+    max-width: 240px;
+    min-width: 120px;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.note-popup::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1f2937;
 }
 
 .empty-state {
@@ -632,6 +710,40 @@ tr:last-child td {
     outline: none;
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.date-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.today-label {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    color: #6b7280 !important;
+    text-transform: uppercase !important;
+    cursor: pointer;
+}
+
+.today-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: #3b82f6;
+}
+
+.date-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
 }
 
 .btn-create-operation {

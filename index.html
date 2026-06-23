@@ -32,7 +32,7 @@
 
         <div class="admin-tabs">
             <button
-                v-for="tab in ['dashboard', 'operations', 'participants', 'shop-members', 'salaries']"
+                v-for="tab in ['dashboard', 'operations', 'participants', 'salaries']"
                 :key="tab"
                 @click="adminTab = tab"
                 :class="{ active: adminTab === tab }"
@@ -41,7 +41,6 @@
                 {{ tab === 'dashboard' ? 'Дашборд' :
                    tab === 'operations' ? 'Операции' :
                    tab === 'participants' ? 'Контрагенты' :
-                   tab === 'shop-members' ? 'Работники' :
                    'Зарплаты' }}
             </button>
         </div>
@@ -57,7 +56,6 @@
                 <thead>
                     <tr>
                         <th>Участник</th>
-                        <th>Точка</th>
                         <th>Валюта</th>
                         <th>Остаток</th>
                         <th>День</th>
@@ -66,7 +64,6 @@
                 <tbody>
                     <tr v-for="balance in adminBalances" :key="`${balance.participant_id}-${balance.op_date}`">
                         <td>{{ getParticipantName(balance.participant_id) }}</td>
-                        <td>{{ balance.shop_id || '-' }}</td>
                         <td>{{ balance.currency }}</td>
                         <td class="amount">{{ balance.running_total }}</td>
                         <td>{{ formatDate(balance.op_date) }}</td>
@@ -86,7 +83,7 @@
                         <th>От</th>
                         <th>Кому</th>
                         <th>Сумма</th>
-                        <th>Тип</th>
+                        <th>Комментарий</th>
                         <th>Действия</th>
                     </tr>
                 </thead>
@@ -96,14 +93,22 @@
                         <td>{{ op.shop_id || '-' }}</td>
                         <td>{{ getParticipantName(op.from) }}</td>
                         <td>{{ getParticipantName(op.to) }}</td>
-                        <td class="amount">{{ op.amount }}</td>
-                        <td>{{ op.kind }}</td>
+                        <td><input type="number" v-model.number="op.amount" class="amount-input"></td>
+                        <td>
+                            <div v-if="op.note" class="note-wrap">
+                                <button @click="toggleNote(op.id)" class="btn-note" :class="{ active: activeNoteId === op.id }">💬</button>
+                                <div v-if="activeNoteId === op.id" class="note-popup">{{ op.note }}</div>
+                            </div>
+                        </td>
                         <td>
                             <button @click="deleteOperation(op.id)" class="btn-delete">✕</button>
                         </td>
                     </tr>
                 </tbody>
             </table>
+            <div class="action-buttons">
+                <button class="btn-save" @click="saveAdminOperations">Сохранить изменения</button>
+            </div>
         </div>
 
         <!-- Participants tab -->
@@ -120,6 +125,12 @@
                 </select>
                 <button @click="createParticipant" class="btn-primary">Создать</button>
             </div>
+            <div class="type-filter">
+                <label v-for="type in participantTypes" :key="type.id" class="filter-checkbox">
+                    <input type="checkbox" :value="type.id" v-model="participantTypeFilter">
+                    {{ type.name }}
+                </label>
+            </div>
             <table class="admin-table">
                 <thead>
                     <tr>
@@ -129,38 +140,18 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="p in participants" :key="p.id">
+                    <tr v-for="p in filteredParticipants" :key="p.id">
                         <td>{{ p.id }}</td>
                         <td>{{ p.name }}</td>
-                        <td>{{ p.participant_type_id }}</td>
+                        <td>{{ getTypeName(p.participant_type_id) }}</td>
+                    </tr>
+                    <tr v-if="filteredParticipants.length === 0">
+                        <td colspan="3" style="text-align: center; padding: 40px;">Нет контрагентов</td>
                     </tr>
                 </tbody>
             </table>
         </div>
 
-        <!-- Shop Members tab -->
-        <div v-else-if="adminTab === 'shop-members'" class="admin-tab-content">
-            <h2>Распределение работников по точкам</h2>
-            <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>Точка</th>
-                        <th>Работник</th>
-                        <th>Роль</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="member in shopMembers" :key="`${member.shop_id}-${member.person_id}`">
-                        <td>{{ member.shop_id }}</td>
-                        <td>{{ getParticipantName(member.person_id) }}</td>
-                        <td>{{ member.role_at_shop }}</td>
-                    </tr>
-                    <tr v-if="shopMembers.length === 0">
-                        <td colspan="3" style="text-align: center; padding: 40px;">Нет записей</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
 
         <!-- Salaries tab -->
         <div v-else-if="adminTab === 'salaries'" class="admin-tab-content">
@@ -216,19 +207,14 @@
                 <thead>
                     <tr>
                         <th>Дата</th>
-                        <th>Тип</th>
                         <th>Контрагент</th>
                         <th>Сумма</th>
+                        <th>Комментарий</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="op in paginatedOperations" :key="op.id" :class="{ 'income-row': op.isIncome, 'expense-row': !op.isIncome }">
                         <td>{{ formatDate(op.created_at) }}</td>
-                        <td class="operation-type">
-                            <span :class="op.isIncome ? 'badge-income' : 'badge-expense'">
-                                {{ op.isIncome ? '↓ Доход' : '↑ Расход' }}
-                            </span>
-                        </td>
                         <td>{{ getParticipantName(op.counterparty) }}</td>
                         <td>
                             <input
@@ -236,6 +222,12 @@
                                 v-model.number="op.amount"
                                 class="amount-input"
                             >
+                        </td>
+                        <td>
+                            <div v-if="op.note" class="note-wrap">
+                                <button @click="toggleNote(op.id)" class="btn-note" :class="{ active: activeNoteId === op.id }">💬</button>
+                                <div v-if="activeNoteId === op.id" class="note-popup">{{ op.note }}</div>
+                            </div>
                         </td>
                     </tr>
                     <tr v-if="paginatedOperations.length === 0">
@@ -279,36 +271,6 @@
             <h3>Новая операция</h3>
             <div class="form-row">
                 <div class="form-group">
-                    <label>Точка</label>
-                    <select v-model.number="newOperation.shop_id" required>
-                        <option value="" disabled>Выберите точку</option>
-                        <option v-for="shop in myShops" :key="shop" :value="shop">
-                            Магазин {{ shop }}
-                        </option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Дата</label>
-                    <input type="date" v-model="newOperation.op_date" required>
-                </div>
-
-                <div class="form-group">
-                    <label>Тип</label>
-                    <select v-model="newOperation.kind" required>
-                        <option value="revenue">Доход</option>
-                        <option value="expense">Расход</option>
-                        <option value="transfer">Перевод</option>
-                        <option value="salary_accrual">Начисление зарплаты</option>
-                        <option value="salary_draw">Выплата зарплаты</option>
-                        <option value="goods">Товары</option>
-                        <option value="adjustment">Корректировка</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
                     <label>От</label>
                     <select v-model.number="newOperation.from" required>
                         <option value="" disabled>Выберите</option>
@@ -331,6 +293,14 @@
                 <div class="form-group">
                     <label>Сумма (₽)</label>
                     <input type="number" v-model.number="newOperation.amount" placeholder="0" required min="0">
+                </div>
+
+                <div class="form-group date-group">
+                    <label class="today-label">
+                        <input type="checkbox" v-model="newOperation.isToday" @change="onTodayToggle">
+                        Сегодня
+                    </label>
+                    <input v-if="!newOperation.isToday" type="date" v-model="newOperation.op_date" class="date-input">
                 </div>
             </div>
 

@@ -18,14 +18,13 @@ createApp({
             originalAmounts: {},
             selectedParticipant: null,
             newOperation: {
-                shop_id: null,
                 from: null,
                 to: null,
                 amount: 0,
                 op_date: new Date().toISOString().slice(0, 10),
-                kind: 'transfer',
                 currency: 'RUB',
-                note: ''
+                note: '',
+                isToday: true
             },
             manualDate: false,
             selectedDate: new Date().toISOString().slice(0, 10),
@@ -47,11 +46,13 @@ createApp({
             workerSalaries: [],
             shopMembers: [],
             participantTypes: [],
+            participantTypeFilter: [],
             newParticipant: {
                 name: '',
                 type: ''
             },
-            adminTab: 'dashboard'
+            adminTab: 'dashboard',
+            activeNoteId: null
         };
     },
 
@@ -62,6 +63,16 @@ createApp({
 
         isWorker() {
             return this.userRole === 'worker';
+        },
+
+        workerParticipants() {
+            if (!this.workerParticipantTypeId) return [];
+            return this.participants.filter(p => p.participant_type_id === this.workerParticipantTypeId);
+        },
+
+        filteredParticipants() {
+            if (this.participantTypeFilter.length === 0) return [];
+            return this.participants.filter(p => this.participantTypeFilter.includes(p.participant_type_id));
         },
 
         allOperations() {
@@ -188,6 +199,7 @@ createApp({
                     await this.loadWorkerSalaries();
                     await this.loadShopMembers();
                     await this.loadParticipantTypes();
+                    await this.loadWorkerParticipantType();
                 }
             } catch (error) {
                 console.error('Error loading user role:', error);
@@ -206,6 +218,7 @@ createApp({
 
                 if (error) throw error;
                 this.participantTypes = data || [];
+                this.participantTypeFilter = (data || []).map(t => t.id);
             } catch (error) {
                 console.error('Error loading participant types:', error);
             }
@@ -293,6 +306,11 @@ createApp({
             return participant ? participant.name : 'Неизвестно';
         },
 
+        getTypeName(typeId) {
+            const type = this.participantTypes.find(t => t.id === typeId);
+            return type ? type.name : typeId;
+        },
+
         formatDate(dateString) {
             const date = new Date(dateString);
             return date.toLocaleDateString('ru-RU', {
@@ -342,13 +360,18 @@ createApp({
             }
         },
 
-        async createOperation() {
-            const { shop_id, from, to, amount, op_date, kind, currency, note } = this.newOperation;
+        toggleNote(id) {
+            this.activeNoteId = this.activeNoteId === id ? null : id;
+        },
 
-            if (!shop_id) {
-                alert('Выберите точку');
-                return;
+        onTodayToggle() {
+            if (this.newOperation.isToday) {
+                this.newOperation.op_date = new Date().toISOString().slice(0, 10);
             }
+        },
+
+        async createOperation() {
+            const { from, to, amount, op_date, currency, note } = this.newOperation;
 
             if (!from || !to || amount <= 0) {
                 alert('Заполните все поля');
@@ -359,12 +382,10 @@ createApp({
                 const { error } = await sb
                     .from('Operations')
                     .insert({
-                        shop_id,
                         from,
                         to,
                         amount: Math.floor(amount),
                         op_date,
-                        kind,
                         currency,
                         note: note || null
                     });
@@ -376,14 +397,13 @@ createApp({
                 }
 
                 this.newOperation = {
-                    shop_id: this.selectedShop || null,
                     from: this.currentPersonId || null,
                     to: null,
                     amount: 0,
                     op_date: new Date().toISOString().slice(0, 10),
-                    kind: 'transfer',
                     currency: 'RUB',
-                    note: ''
+                    note: '',
+                    isToday: true
                 };
 
                 await this.loadData();
@@ -458,6 +478,35 @@ createApp({
             } catch (error) {
                 console.error('Ошибка при сохранении:', error);
                 alert('Произошла ошибка при сохранении. Проверьте консоль.');
+            }
+        },
+
+        async saveAdminOperations() {
+            try {
+                let updated = false;
+                for (const op of this.operations) {
+                    const original = this.originalAmounts[op.id];
+                    if (original !== undefined && Number(original) !== Number(op.amount)) {
+                        const { error } = await sb
+                            .from('Operations')
+                            .update({ amount: Math.floor(op.amount) })
+                            .eq('id', op.id);
+                        if (error) {
+                            alert(`Ошибка при сохранении операции ${op.id}: ${error.message}`);
+                            return;
+                        }
+                        updated = true;
+                    }
+                }
+                if (updated) {
+                    await this.loadData();
+                    alert('Изменения сохранены');
+                } else {
+                    alert('Нет изменений');
+                }
+            } catch (error) {
+                console.error('Ошибка при сохранении:', error);
+                alert('Ошибка при сохранении');
             }
         },
 
